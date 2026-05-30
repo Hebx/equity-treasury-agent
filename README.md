@@ -64,6 +64,12 @@ npm install -g equity-treasury-agent
 ats-agent 'Deploy a new equity "Acme Series A" symbol ACME ISIN US0378331005, max supply 1000000, USD, allowed country US, voting rights, preferred dividend.'
 ```
 
+Or run it without installing, using `npx`:
+
+```bash
+npx equity-treasury-agent 'Show me the cap table for 0x<diamond>'
+```
+
 The agent reads credentials from the environment (or a `.env` in the working
 directory). Copy [`.env.example`](./.env.example) and fill in your operator creds
 and `GEMINI_API_KEY` before running.
