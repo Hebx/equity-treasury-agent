@@ -2,29 +2,112 @@
 
 [![npm](https://img.shields.io/npm/v/equity-treasury-agent.svg)](https://www.npmjs.com/package/equity-treasury-agent)
 
-An LLM-powered enterprise treasury agent that issues and administers tokenized
-securities on Hedera testnet from natural language. It wires the
+An LLM-powered enterprise treasury agent that deploys and administers tokenized
+securities on Hedera from natural language. It wires the
 [`@hebx/hak-ats-plugin`](https://www.npmjs.com/package/@hebx/hak-ats-plugin) Hedera
 Agent Kit plugin into a LangGraph ReAct agent: you describe what you want, the model
 selects and calls the on-chain tools, and every action settles as a real transaction.
 
 This is not a scripted demo. Tool selection and arguments are decided by the LLM,
-and every tool call hits the live network — real contracts, real testnet HBAR.
+and every tool call hits the live network — real contracts, real HBAR.
 
 ## What it does
 
 Through the ATS plugin, the agent can:
 
-- **Deploy** a tokenized equity security (an ERC-1400 / Asset Tokenization Studio
+- **Deploy** a tokenized **equity** security (an ERC-1400 / Asset Tokenization Studio
   diamond) and return its address and transaction hash
+- **Deploy** a tokenized **bond** with par value and a start/maturity schedule
 - **Issue** units to an investor
 - **Transfer** units between holders through the compliance path
+- **Force-transfer** units (regulatory clawback) via the ERC-1644 controller authority
+  for lost-key recovery, court orders, or sanctions enforcement
+- **Pause / unpause** all transfers on a security (emergency freeze)
 - **Read** a security's info (name, symbol, supply, paused state)
 - **Read** the cap table (holders and balances) from on-chain Transfer events
 - **Pay a dividend** as a pro-rata HBAR fan-out across current holders
 
-Equity only (bonds are not yet supported by the deployed reference configuration).
-Testnet only — the plugin's policies hard-deny mainnet.
+Plus an on-chain **registry and audit trail** built on Hedera Consensus Service (HCS):
+
+- **Register** a deployed security so it can be **resolved by name, symbol, or ISIN**
+  instead of a raw `0x` address
+- **Log corporate actions** (issue, transfer, dividend, pause) as a tamper-evident trail
+- **Attest investor KYC** (GRANTED / REVOKED) as an auditable record
+- **Anchor documents** (term sheets, prospectuses, board resolutions) by SHA-256 digest
+
+## Network: opt-in, at your own risk
+
+Network selection works like any other Hedera library: set `HEDERA_NETWORK` and you
+operate on that network.
+
+- `HEDERA_NETWORK=testnet` (default) → Hedera testnet, test HBAR
+- `HEDERA_NETWORK=mainnet` → Hedera mainnet, **real value, irreversible transactions**
+
+There is no separate flag and no mainnet "deny." Mainnet is a deliberate, explicit
+choice. The safety policies that *do* stay enforced on every network are the
+**max-supply cap** and the **jurisdiction allowlist**. On-chain KYC enforcement via the
+ERC-3643 identity registry is a roadmap item; today KYC is recorded as an HCS
+attestation, not a transfer-gating on-chain binding.
+
+## User story
+
+> *"As the treasury operator at a mid-size private company, I want to stand up our
+> Series A equity on-chain, bring our cap table into one auditable place, and run
+> investor operations in plain English — without hand-deploying contracts or
+> reconciling spreadsheets."*
+
+A walk-through of that story with this agent:
+
+```text
+> Deploy a new equity "Acme Series A" symbol ACME ISIN US0378331005,
+  max supply 1000000, USD, allowed countries US and GB, voting rights, preferred dividend.
+  → deploys the diamond, returns 0xACME… + tx hash
+
+> Register ACME in the registry so we can refer to it by name.
+  → anchors a security.registered record to the HCS topic
+
+> Attest KYC granted for investor 0xInvestor1 (jurisdiction US).
+  → anchors a kyc.attestation record
+
+> Issue 250000 ACME to 0xInvestor1, then show me the cap table.
+  → issues units, then reads holders + balances from the mirror node
+
+> Anchor our Series A term sheet (here is the text…) to ACME.
+  → hashes the document and anchors the SHA-256 as the document-of-record
+
+> Pay a dividend of 50 HBAR to ACME holders.
+  → pro-rata HBAR fan-out across the current cap table
+```
+
+Everything above is a real transaction, and every administrative step leaves a
+tamper-evident record on the HCS registry.
+
+## Real enterprise use case: tokenized bond issuance with a compliance audit trail
+
+A regional **real-estate fund** raises a €10M development bond and wants the raise to
+be auditable end-to-end for its regulator, with the ability to enforce sanctions and
+recover lost holdings.
+
+1. **Issue the instrument.** Deploy a bond `RE-FUND-2031` (EUR par value, 6-year
+   maturity), capped supply, with the country control list set to its allowed EU
+   jurisdictions. The jurisdiction-allowlist policy blocks any disallowed country at
+   deploy time.
+2. **Onboard investors.** As each investor clears KYC/AML off-chain, the operator
+   anchors a KYC attestation to the registry — an independent, timestamped record the
+   regulator can read without trusting the fund's internal database.
+3. **Distribute.** Issue bond units to cleared investors; every issuance is logged as a
+   corporate action with its transaction hash.
+4. **Anchor the prospectus.** The offering memorandum's SHA-256 digest is anchored, so
+   anyone can prove the document on file is the exact one investors received.
+5. **Enforce and recover.** If a holder is later sanctioned, the operator can
+   **pause** the security or **force-transfer** the holding to a custody address under
+   the ERC-1644 controller authority — and that action, too, lands in the audit trail.
+6. **Report.** At any time, reading the registry reproduces the full lifecycle:
+   registration, KYC attestations, issuances, transfers, freezes, and document anchors —
+   reconstructed independently from the Hedera mirror node, not from the fund's books.
+
+The result is a security whose entire administrative history is verifiable by a third
+party, which is exactly what a securities regulator expects of a transfer agent.
 
 ## Architecture
 
@@ -32,15 +115,15 @@ Testnet only — the plugin's policies hard-deny mainnet.
 natural language
       │
       ▼
-LangGraph ReAct agent  ── system prompt (treasury persona) ──┐
-      │                                                       │
-      │  toolkit.getTools()                                   │
-      ▼                                                       │
-HederaLangchainToolkit  ◄── @hebx/hak-ats-plugin (6 tools) ───┘
+LangGraph ReAct agent  ── system prompt (treasury persona, network-aware) ──┐
+      │                                                                      │
+      │  toolkit.getTools()                                                  │
+      ▼                                                                      │
+HederaLangchainToolkit  ◄── @hebx/hak-ats-plugin (14 tools) ─────────────────┘
       │
       ▼
-Hedera testnet (Hashio JSON-RPC) + mirror node
-ATS factory 0.0.7512002 · resolver 0.0.7511642
+Hedera testnet OR mainnet (Hashio JSON-RPC) + mirror node + HCS registry topic
+ATS factory + resolver (per-network configuration)
 ```
 
 The plugin is consumed as the published npm package `@hebx/hak-ats-plugin`.
@@ -48,7 +131,7 @@ The plugin is consumed as the published npm package `@hebx/hak-ats-plugin`.
 ## Requirements
 
 - Node.js >= 20
-- A Hedera **testnet** account with ECDSA keys and some HBAR
+- A Hedera account (testnet or mainnet) with ECDSA keys and some HBAR
 - A Google Gemini API key (default) or an OpenAI API key
 
 ## Setup
@@ -72,7 +155,8 @@ npx equity-treasury-agent 'Show me the cap table for 0x<diamond>'
 
 The agent reads credentials from the environment (or a `.env` in the working
 directory). Copy [`.env.example`](./.env.example) and fill in your operator creds
-and `GEMINI_API_KEY` before running.
+and `GEMINI_API_KEY` before running. Set `HEDERA_NETWORK=mainnet` only when you
+intend to operate on mainnet with real value.
 
 ### From source
 
@@ -89,7 +173,7 @@ cp .env.example .env   # fill in operator creds + GEMINI_API_KEY
 
 ## Usage
 
-Verify the environment before a live run:
+Verify the environment before a live run (prints the active network and warns on mainnet):
 
 ```bash
 npm run preflight
@@ -105,29 +189,64 @@ Interactive:
 
 ```bash
 npm run agent
+> register ACME in the registry, then resolve "ACME" to its address
 > issue 1000 units of 0x<diamond> to 0x<investor>, then show the cap table
+> pause 0x<diamond>
 > pay a dividend of 5 HBAR to holders of 0x<diamond>
 > exit
 ```
 
+### Live end-to-end demo
+
+The repo ships a scripted lifecycle that drives the agent through deploy → register →
+KYC → issue → cap table → document anchor → audit trail, each as a real natural-language
+instruction against live testnet:
+
+```bash
+npm run preflight   # confirm balance, RPC, mirror, and LLM key first
+npm run demo        # run the full story; npm run demo -- 1 3 runs only those steps
+```
+
+The demo uses a unique security symbol per run so repeat runs never collide. Each step
+prints the instruction, the agent's reply (with diamond address, tx hashes, and the HCS
+topic), and its timing. It exits non-zero if any step fails, so it is safe to gate a
+release check on it.
+
 ## Notes
 
+- **Network.** `HEDERA_NETWORK` selects testnet (default) or mainnet. Mainnet moves
+  real value and is irreversible; the agent and preflight both surface the active
+  network so you always know where you are.
 - **Addresses.** Issuance and transfers use **EVM addresses** (`0x...`), not Hedera
   `0.0.x` ids. The agent will ask for the EVM address if you give it an account id.
+  (Dividends are the exception — they pay native HBAR to the `0.0.x` accounts resolved
+  from the cap table.)
 - **ISIN.** Deployment requires a checksum-valid ISO-6166 ISIN. `US0378331005`
-  (Apple) is a convenient valid value for testnet.
+  (Apple) is a convenient valid value for testing.
+- **Registry topic.** The first registry write creates an HCS topic and returns its id.
+  Within a single agent session, later reads (resolve / list) automatically reuse that
+  topic, so a deploy-then-resolve flow works out of the box. To reuse the **same**
+  registry across separate runs, set `HCS_REGISTRY_TOPIC_ID` to the returned id.
+- **Symbols.** Security symbols are capped at 8 characters (e.g. `ACME`, `RE2031`).
 - **Cap-table lag.** The cap table is reconstructed from mirror-node Transfer logs,
   which trail a transaction by a few seconds. A read immediately after an issue may
   show stale data; re-read shortly after.
-- **Safety.** Mainnet-deny, max-supply-cap, and jurisdiction-allowlist policies are
-  enforced inside the plugin tools, not by the prompt.
+- **Bonds.** Equity and bond instruments are supported. Coupon-rate facets are not yet
+  wired — the agent deploys the core bond instrument with its par value and maturity.
+- **Safety.** Max-supply-cap and jurisdiction-allowlist policies are enforced inside the
+  plugin tools, not by the prompt.
+- **LLM rate limits.** The agent retries transient `429`/`5xx` responses automatically
+  (`LLM_MAX_RETRIES`, default 4). A hard *daily* quota cap (e.g. the Gemini free tier's
+  20 requests/day) is not something retries can defeat — use a paid key or a higher-tier
+  model for a full demo run.
 
 ## Scripts
 
 | Script | Description |
 |---|---|
-| `npm run preflight` | Check env, operator balance, RPC, mirror node, LLM key |
+| `npm run preflight` | Check network, env, operator balance, RPC, mirror node, LLM key |
 | `npm run agent` | Run the agent (one-shot with args, or interactive) |
+| `npm run demo` | Run the full live lifecycle demo on testnet |
 | `npm run build` | Type-build the agent to `dist/` |
 | `npm run typecheck` | Type-check without emitting |
 | `npm run lint` | ESLint |
