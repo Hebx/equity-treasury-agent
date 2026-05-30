@@ -5,7 +5,7 @@ import { HederaLangchainToolkit } from '@hashgraph/hedera-agent-kit-langchain';
 import { atsPlugin } from '@hebx/hak-ats-plugin';
 import type { AgentEnv } from './config.js';
 import { buildHederaClient, buildLlm } from './runtime.js';
-import { TREASURY_SYSTEM_PROMPT } from './prompts.js';
+import { buildTreasurySystemPrompt } from './prompts.js';
 
 export interface TreasuryAgent {
   /** Run one natural-language instruction; returns the agent's final text reply. */
@@ -32,7 +32,7 @@ export async function createTreasuryAgent(env: AgentEnv): Promise<TreasuryAgent>
   const agent = createReactAgent({
     llm,
     tools: toolkit.getTools(),
-    prompt: new SystemMessage(TREASURY_SYSTEM_PROMPT),
+    prompt: new SystemMessage(buildTreasurySystemPrompt(env.HEDERA_NETWORK)),
   });
 
   return {

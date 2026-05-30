@@ -11,9 +11,18 @@ import { loadAgentEnv } from './config.js';
 async function main(): Promise<void> {
   const env = loadAgentEnv();
   const checks: { name: string; ok: boolean; detail: string }[] = [];
+  const isMainnet = env.HEDERA_NETWORK === 'mainnet';
 
-  // 1. Operator balance (native testnet query).
-  const client = Client.forTestnet().setOperator(
+  process.stdout.write(`Network: ${env.HEDERA_NETWORK.toUpperCase()}\n`);
+  if (isMainnet) {
+    process.stdout.write(
+      'WARNING: mainnet is configured. Tools will spend real HBAR and moves are irreversible.\n',
+    );
+  }
+  process.stdout.write('\n');
+
+  // 1. Operator balance (native query on the configured network).
+  const client = (isMainnet ? Client.forMainnet() : Client.forTestnet()).setOperator(
     AccountId.fromString(env.HEDERA_OPERATOR_ID),
     PrivateKey.fromStringECDSA(env.HEDERA_OPERATOR_KEY),
   );
@@ -34,7 +43,9 @@ async function main(): Promise<void> {
   }
 
   // 2. JSON-RPC reachable (chain id).
-  const rpcUrl = process.env.HEDERA_RPC_URL ?? 'https://testnet.hashio.io/api';
+  const rpcUrl =
+    process.env.HEDERA_RPC_URL ??
+    (isMainnet ? 'https://mainnet.hashio.io/api' : 'https://testnet.hashio.io/api');
   try {
     const res = await fetch(rpcUrl, {
       method: 'POST',
@@ -52,7 +63,11 @@ async function main(): Promise<void> {
   }
 
   // 3. Mirror node reachable.
-  const mirror = process.env.HEDERA_MIRROR_NODE_URL ?? 'https://testnet.mirrornode.hedera.com';
+  const mirror =
+    process.env.HEDERA_MIRROR_NODE_URL ??
+    (isMainnet
+      ? 'https://mainnet-public.mirrornode.hedera.com'
+      : 'https://testnet.mirrornode.hedera.com');
   try {
     const res = await fetch(`${mirror}/api/v1/network/nodes?limit=1`);
     checks.push({ name: 'mirror node', ok: res.ok, detail: `HTTP ${res.status}` });
