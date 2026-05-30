@@ -1,10 +1,12 @@
 # Equity Treasury Agent
 
+[![npm](https://img.shields.io/npm/v/equity-treasury-agent.svg)](https://www.npmjs.com/package/equity-treasury-agent)
+
 An LLM-powered enterprise treasury agent that issues and administers tokenized
 securities on Hedera testnet from natural language. It wires the
-[`@hebx/hak-ats-plugin`](https://github.com/Hebx/hak-ats-plugin) Hedera Agent Kit
-plugin into a LangGraph ReAct agent: you describe what you want, the model selects
-and calls the on-chain tools, and every action settles as a real transaction.
+[`@hebx/hak-ats-plugin`](https://www.npmjs.com/package/@hebx/hak-ats-plugin) Hedera
+Agent Kit plugin into a LangGraph ReAct agent: you describe what you want, the model
+selects and calls the on-chain tools, and every action settles as a real transaction.
 
 This is not a scripted demo. Tool selection and arguments are decided by the LLM,
 and every tool call hits the live network — real contracts, real testnet HBAR.
@@ -50,6 +52,23 @@ The plugin is consumed as the published npm package `@hebx/hak-ats-plugin`.
 - A Google Gemini API key (default) or an OpenAI API key
 
 ## Setup
+
+### Install from npm
+
+The package ships an `ats-agent` bin:
+
+```bash
+npm install -g equity-treasury-agent
+
+# configure (see .env.example in the repo for the full contract)
+ats-agent 'Deploy a new equity "Acme Series A" symbol ACME ISIN US0378331005, max supply 1000000, USD, allowed country US, voting rights, preferred dividend.'
+```
+
+The agent reads credentials from the environment (or a `.env` in the working
+directory). Copy [`.env.example`](./.env.example) and fill in your operator creds
+and `GEMINI_API_KEY` before running.
+
+### From source
 
 ```bash
 git clone <this-repo>
