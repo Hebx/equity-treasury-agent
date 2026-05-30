@@ -1,12 +1,41 @@
 {
   "name": "equity-treasury-agent",
   "version": "0.1.0",
-  "private": true,
   "description": "LLM-powered enterprise treasury agent that issues and administers tokenized securities on Hedera testnet via the @hebx/hak-ats-plugin Hedera Agent Kit plugin.",
   "type": "module",
   "license": "MIT",
+  "author": "Hebx",
+  "keywords": [
+    "hedera",
+    "hedera-agent-kit",
+    "tokenization",
+    "asset-tokenization-studio",
+    "erc-1400",
+    "erc-3643",
+    "langchain",
+    "langgraph",
+    "ai-agent",
+    "treasury"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hebx/equity-treasury-agent.git"
+  },
+  "homepage": "https://github.com/Hebx/equity-treasury-agent#readme",
+  "bugs": {
+    "url": "https://github.com/Hebx/equity-treasury-agent/issues"
+  },
   "bin": {
     "ats-agent": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -15,13 +44,13 @@
     "format": "prettier --write .",
     "agent": "tsx src/cli.ts",
     "preflight": "tsx src/preflight.ts",
-    "plugin:build": "npm --prefix vendor/hak-ats-plugin install && npm --prefix vendor/hak-ats-plugin run build",
+    "prepublishOnly": "npm run build",
     "secrets:scan": "gitleaks detect --no-banner --source ."
   },
   "dependencies": {
     "@hashgraph/hedera-agent-kit": "^4.0.0",
     "@hashgraph/hedera-agent-kit-langchain": "^1.0.0",
-    "@hebx/hak-ats-plugin": "file:vendor/hak-ats-plugin",
+    "@hebx/hak-ats-plugin": "^0.2.0",
     "@hiero-ledger/sdk": "^2.81.0",
     "@langchain/core": "^1.1.48",
     "@langchain/google-genai": "^2.1.31",

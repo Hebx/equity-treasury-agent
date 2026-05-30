@@ -41,9 +41,7 @@ Hedera testnet (Hashio JSON-RPC) + mirror node
 ATS factory 0.0.7512002 · resolver 0.0.7511642
 ```
 
-The plugin is consumed as a git submodule under `vendor/hak-ats-plugin` and linked
-via a `file:` dependency until it is published to npm, at which point the dependency
-flips to `@hebx/hak-ats-plugin` with a one-line change.
+The plugin is consumed as the published npm package `@hebx/hak-ats-plugin`.
 
 ## Requirements
 
@@ -54,23 +52,14 @@ flips to `@hebx/hak-ats-plugin` with a one-line change.
 ## Setup
 
 ```bash
-git clone --recurse-submodules <this-repo>
+git clone <this-repo>
 cd equity-treasury-agent
 
-# build the plugin submodule (provides the linked dist/)
-npm run plugin:build
-
-# install agent dependencies
+# install agent + plugin dependencies
 npm install
 
 # configure
 cp .env.example .env   # fill in operator creds + GEMINI_API_KEY
-```
-
-If you cloned without `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
 ```
 
 ## Usage
@@ -114,7 +103,6 @@ npm run agent
 |---|---|
 | `npm run preflight` | Check env, operator balance, RPC, mirror node, LLM key |
 | `npm run agent` | Run the agent (one-shot with args, or interactive) |
-| `npm run plugin:build` | Install + build the vendored plugin submodule |
 | `npm run build` | Type-build the agent to `dist/` |
 | `npm run typecheck` | Type-check without emitting |
 | `npm run lint` | ESLint |
