@@ -9,8 +9,11 @@ import { createTreasuryAgent } from './agent.js';
  * call against live Hedera testnet — real contracts, real HBAR, real HCS messages.
  *
  * Story: "Acme Robotics raises a Series A." A treasury operator walks the agent
- * through deploy -> register -> KYC -> issue -> cap table -> document anchor ->
- * audit trail, the way a real back-office user would.
+ * through deploy -> register -> KYC -> issue -> cap table -> follow-on issue by
+ * Hedera account id -> document anchor -> audit trail, the way a real back-office
+ * user would. The account-id step proves that holders can be addressed by either a
+ * 0x EVM address or a Hedera id (0.0.X), resolved automatically, with reads echoing
+ * both forms (plugin v0.4.x).
  *
  *   npm run demo            # run the whole story
  *   npm run demo -- 1 2 3   # run only the listed step numbers
@@ -28,6 +31,9 @@ interface DemoStep {
 
 interface DemoContext {
   investor: string;
+  /** Same holder as `investor`, expressed as a Hedera id (0.0.X). Drives the step-5
+   *  account-id resolution demo; undefined when INVESTOR_ACCOUNT_ID is unset. */
+  investorAccountId?: string;
   symbol: string;
   isin: string;
 }
@@ -66,6 +72,14 @@ const STEPS: DemoStep[] = [
   },
   {
     n: 5,
+    title: 'Issue a follow-on tranche addressed by Hedera account id',
+    instruction: (c) =>
+      `Issue another 25,000 shares of ${c.symbol} to investor ${c.investorAccountId} — ` +
+      `note that's a Hedera account id (0.0.X), not an EVM address. Then show me the ` +
+      `updated cap table with each holder's EVM address and account id.`,
+  },
+  {
+    n: 6,
     title: 'Anchor the term sheet as a document-of-record',
     instruction: (c) =>
       `Anchor a document titled "Acme Robotics Series A Term Sheet" to the registry for symbol ` +
@@ -73,7 +87,7 @@ const STEPS: DemoStep[] = [
       `Pre-money $40M. Liquidation preference 1x non-participating. Board: 2 founders, 1 investor."`,
   },
   {
-    n: 6,
+    n: 7,
     title: 'Read back the registry audit trail',
     instruction: () =>
       `List the full securities-registry audit trail and summarize what records exist ` +
@@ -96,11 +110,16 @@ async function main(): Promise<void> {
       throw new Error('INVESTOR_EVM_ADDRESS must be set in .env for the demo');
     })();
 
+  // Same holder, as a Hedera id, for the account-id resolution step. Optional: if it's
+  // not set we drop that step rather than send a malformed instruction (see below).
+  const investorAccountId = env.INVESTOR_ACCOUNT_ID;
+
   // A unique symbol per run keeps registry resolution unambiguous across repeat demos.
   // The tool caps symbols at 8 chars, so use a short prefix + 4-digit suffix (e.g. ACME1234).
   const stamp = String(Date.now()).slice(-4);
   const ctx: DemoContext = {
     investor,
+    investorAccountId,
     symbol: `ACME${stamp}`,
     isin: 'US0378331005',
   };
@@ -110,7 +129,17 @@ async function main(): Promise<void> {
     .slice(2)
     .map((s) => Number.parseInt(s, 10))
     .filter((n) => Number.isInteger(n));
-  const steps = want.length ? STEPS.filter((s) => want.includes(s.n)) : STEPS;
+  const selected = want.length ? STEPS.filter((s) => want.includes(s.n)) : STEPS;
+
+  // Step 5 (account-id issuance) needs INVESTOR_ACCOUNT_ID to demonstrate id -> EVM
+  // resolution. If it's unset, drop it and say why rather than issuing to `undefined`.
+  const steps = investorAccountId ? selected : selected.filter((s) => s.n !== 5);
+  if (!investorAccountId && selected.some((s) => s.n === 5)) {
+    process.stdout.write(
+      '\nNote: INVESTOR_ACCOUNT_ID is not set — skipping step 5 (the account-id\n' +
+        'issuance/resolution demo). Set it in .env to include it.\n',
+    );
+  }
 
   process.stdout.write(
     `\nEquity Treasury Agent — live e2e demo on ${env.HEDERA_NETWORK.toUpperCase()}\n` +

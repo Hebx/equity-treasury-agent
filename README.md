@@ -135,11 +135,19 @@ agent's prose. Reproduce it with `npm run demo`.
 | 2 | Attest investor KYC | registry seq 2 (GRANTED, US, ref `acme-sa-001`) |
 | 3 | Issue 50,000 shares | tx `0x96dcac85…49ad5` |
 | 4 | Read cap table | total supply 50,000 · 1 holder (from Transfer events) |
-| 5 | Anchor term sheet | SHA-256 `a2cd29bc…08e6b3` · registry seq 3 |
-| 6 | Replay audit trail | 1 security + 1 KYC + 1 document, all resolved |
+| 5 | Issue 25,000 more, addressed by Hedera id `0.0.x` | id resolved to the holder's EVM address; balance → 75,000, still 1 holder |
+| 6 | Anchor term sheet | SHA-256 `a2cd29bc…08e6b3` · registry seq 3 |
+| 7 | Replay audit trail | 1 security + 1 KYC + 1 document, all resolved |
 
-Whole-lifecycle cost: ~1.7 HBAR, dominated by the deploy. Symbols and topics are minted
+Whole-lifecycle cost: ~1.9 HBAR, dominated by the deploy. Symbols and topics are minted
 fresh per run, so repeats never collide.
+
+> Steps 1–4, 6, 7 show values from a verified six-step run (2026-05-31). Step 5 — the
+> follow-on issuance addressed by a Hedera account id — was added in agent `v0.2.0`
+> (plugin `0.4.x`); its exact tx hash is filled in on your next `npm run demo`. Because
+> step 5 re-issues to the *same* holder, the step 6/7 registry values are unchanged (an
+> issuance is an on-chain mint, not a registry record), and step 4 is the pre-tranche
+> snapshot.
 
 ## Architecture
 
@@ -176,8 +184,8 @@ the published plugin.
 The lifecycle the agent walks, end to end:
 
 ```
-  deploy ──▶ register ──▶ attest KYC ──▶ issue ──▶ cap table ──▶ anchor doc ──▶ audit trail
-   (EVM)      (HCS)         (HCS)        (EVM)     (mirror)        (HCS)          (HCS)
+  deploy ──▶ register ──▶ attest KYC ──▶ issue ──▶ cap table ──▶ issue by 0.0.x ──▶ anchor doc ──▶ audit trail
+   (EVM)      (HCS)         (HCS)        (EVM)     (mirror)       (EVM, id→EVM)      (HCS)          (HCS)
 ```
 
 The plugin is consumed as the published npm package `@hebx/hak-ats-plugin` (v0.4.x).
@@ -253,8 +261,8 @@ npm run agent
 ### Live end-to-end demo
 
 The repo ships a scripted lifecycle that drives the agent through deploy → register →
-KYC → issue → cap table → document anchor → audit trail, each as a real natural-language
-instruction against live testnet:
+KYC → issue → cap table → follow-on issue addressed by Hedera account id → document
+anchor → audit trail, each as a real natural-language instruction against live testnet:
 
 ```bash
 npm run preflight   # confirm balance, RPC, mirror, and LLM key first
