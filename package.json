@@ -1,6 +1,6 @@
 {
   "name": "equity-treasury-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LLM-powered enterprise treasury agent that deploys and administers tokenized equity and bonds on Hedera (testnet or mainnet) via the @hebx/hak-ats-plugin Hedera Agent Kit plugin.",
   "type": "module",
   "license": "MIT",

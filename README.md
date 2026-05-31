@@ -1,15 +1,25 @@
 # Equity Treasury Agent
 
 [![npm](https://img.shields.io/npm/v/equity-treasury-agent.svg)](https://www.npmjs.com/package/equity-treasury-agent)
+[![plugin](https://img.shields.io/npm/v/%40hebx%2Fhak-ats-plugin.svg?label=%40hebx%2Fhak-ats-plugin)](https://www.npmjs.com/package/@hebx/hak-ats-plugin)
+[![Hedera](https://img.shields.io/badge/Hedera-testnet%20%7C%20mainnet-7056F5.svg)](https://hedera.com)
 
-An LLM-powered enterprise treasury agent that deploys and administers tokenized
-securities on Hedera from natural language. It wires the
+**Tell it, in a sentence, to issue a tokenized stock — and watch a real ERC-1400
+security, its cap table, its investor KYC, and its documents of record land on Hedera.**
+
+A company's cap table, KYC file, and signed term sheets usually live in three
+different spreadsheets and a shared drive that no outsider can trust. The Equity
+Treasury Agent collapses all three onto one chain and hands them to a treasury
+operator who speaks plain English. It wires the
 [`@hebx/hak-ats-plugin`](https://www.npmjs.com/package/@hebx/hak-ats-plugin) Hedera
-Agent Kit plugin into a LangGraph ReAct agent: you describe what you want, the model
-selects and calls the on-chain tools, and every action settles as a real transaction.
+Agent Kit plugin into a LangGraph ReAct agent: you describe the outcome, the model
+picks the right tool and arguments, and every action settles as a real transaction
+with a tamper-evident record behind it.
 
-This is not a scripted demo. Tool selection and arguments are decided by the LLM,
-and every tool call hits the live network — real contracts, real HBAR.
+Nothing here is scripted. The LLM decides which tool to call and with what
+arguments; every call hits the live network — real contracts, real HBAR, real
+Hedera Consensus Service messages. The repo ships a one-command lifecycle demo
+(`npm run demo`) that proves it end to end on testnet.
 
 ## What it does
 
@@ -109,24 +119,65 @@ recover lost holdings.
 The result is a security whose entire administrative history is verifiable by a third
 party, which is exactly what a securities regulator expects of a transfer agent.
 
+## Proof: a clean end-to-end run on live testnet
+
+The lifecycle below was driven entirely by natural language through the LLM agent on
+Hedera testnet (model `gemini-2.5-flash`, operator `0.0.9050506`). Every value is
+tool-returned and confirmed on-chain or via the mirror node — not lifted from the
+agent's prose. Reproduce it with `npm run demo`.
+
+| Step | Action | On-chain result |
+|---|---|---|
+| 1 | Deploy + register equity | diamond `0x997f2c7a…0f5b94` · HCS topic `0.0.9105211` seq 1 |
+| 2 | Attest investor KYC | registry seq 2 (GRANTED, US, ref `acme-sa-001`) |
+| 3 | Issue 50,000 shares | tx `0x96dcac85…49ad5` |
+| 4 | Read cap table | total supply 50,000 · 1 holder (from Transfer events) |
+| 5 | Anchor term sheet | SHA-256 `a2cd29bc…08e6b3` · registry seq 3 |
+| 6 | Replay audit trail | 1 security + 1 KYC + 1 document, all resolved |
+
+Whole-lifecycle cost: ~1.7 HBAR, dominated by the deploy. Symbols and topics are minted
+fresh per run, so repeats never collide.
+
 ## Architecture
 
+One instruction in plain English fans out into a tool call, an on-chain transaction,
+and an audit-trail record. The agent is a thin orchestrator; all capability lives in
+the published plugin.
+
 ```
-natural language
-      │
-      ▼
-LangGraph ReAct agent  ── system prompt (treasury persona, network-aware) ──┐
-      │                                                                      │
-      │  toolkit.getTools()                                                  │
-      ▼                                                                      │
-HederaLangchainToolkit  ◄── @hebx/hak-ats-plugin (14 tools) ─────────────────┘
-      │
-      ▼
-Hedera testnet OR mainnet (Hashio JSON-RPC) + mirror node + HCS registry topic
-ATS factory + resolver (per-network configuration)
+   “Issue 50,000 ACME shares to 0xInvestor”
+                  │
+                  ▼
+      ┌───────────────────────┐
+      │  LangGraph ReAct agent │   network-aware treasury persona
+      └───────────┬───────────┘
+                  │  picks tool + args (LLM, not a script)
+                  ▼
+      ┌───────────────────────┐
+      │  @hebx/hak-ats-plugin  │   14 tools · policies enforced here
+      └───────────┬───────────┘
+                  │
+        ┌─────────┴───────────────┐
+        ▼                         ▼
+  ┌───────────┐            ┌──────────────┐
+  │  Hedera   │            │     HCS      │
+  │  EVM /    │            │  registry +  │
+  │  ATS      │            │  audit trail │
+  │  diamonds │            │   (topic)    │
+  └─────┬─────┘            └──────┬───────┘
+        │  real tx                │  tamper-evident record
+        ▼                         ▼
+        └──────── mirror node (read-back) ────────┘
 ```
 
-The plugin is consumed as the published npm package `@hebx/hak-ats-plugin`.
+The lifecycle the agent walks, end to end:
+
+```
+  deploy ──▶ register ──▶ attest KYC ──▶ issue ──▶ cap table ──▶ anchor doc ──▶ audit trail
+   (EVM)      (HCS)         (HCS)        (EVM)     (mirror)        (HCS)          (HCS)
+```
+
+The plugin is consumed as the published npm package `@hebx/hak-ats-plugin` (v0.3.x).
 
 ## Requirements
 
