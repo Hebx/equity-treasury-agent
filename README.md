@@ -217,8 +217,9 @@ npx equity-treasury-agent 'Show me the cap table for 0x<diamond>'
 
 The agent reads credentials from the environment (or a `.env` in the working
 directory). Copy [`.env.example`](./.env.example) and fill in your operator creds
-and `GEMINI_API_KEY` before running. Set `HEDERA_NETWORK=mainnet` only when you
-intend to operate on mainnet with real value.
+and an LLM key before running (`GEMINI_API_KEY` for Google, or `OPENAI_API_KEY` with
+optional `OPENAI_BASE_URL` for OpenAI or a local kiro-gateway proxy). Set
+`HEDERA_NETWORK=mainnet` only when you intend to operate on mainnet with real value.
 
 ### From source
 
@@ -230,7 +231,7 @@ cd equity-treasury-agent
 npm install
 
 # configure
-cp .env.example .env   # fill in operator creds + GEMINI_API_KEY
+cp .env.example .env   # fill in operator creds + LLM key (see .env.example)
 ```
 
 ## Usage
@@ -302,14 +303,15 @@ release check on it.
   plugin tools, not by the prompt.
 - **LLM rate limits.** The agent retries transient `429`/`5xx` responses automatically
   (`LLM_MAX_RETRIES`, default 4). A hard *daily* quota cap (e.g. the Gemini free tier's
-  20 requests/day) is not something retries can defeat — use a paid key or a higher-tier
-  model for a full demo run.
+  20 requests/day) is not something retries can defeat — use a paid Gemini key or route
+  through local **kiro-gateway** (`LLM_PROVIDER=openai`, `OPENAI_BASE_URL=http://127.0.0.1:8000/v1`,
+  `OPENAI_API_KEY` = `PROXY_API_KEY`, model `claude-haiku-4.5` or `claude-sonnet-4.5`).
 
 ## Scripts
 
 | Script | Description |
 |---|---|
-| `npm run preflight` | Check network, env, operator balance, RPC, mirror node, LLM key |
+| `npm run preflight` | Check network, env, operator balance, RPC, mirror node, LLM key (+ proxy when set) |
 | `npm run agent` | Run the agent (one-shot with args, or interactive) |
 | `npm run demo` | Run the full live lifecycle demo on testnet |
 | `npm run build` | Type-build the agent to `dist/` |

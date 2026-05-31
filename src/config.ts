@@ -34,6 +34,8 @@ const envSchema = z.object({
   LLM_MAX_RETRIES: z.coerce.number().int().min(0).max(10).optional(),
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  // OpenAI-compatible proxy (e.g. local kiro-gateway). Omit for api.openai.com.
+  OPENAI_BASE_URL: z.string().url().optional(),
 
   // Demo convenience: default holder for issue/transfer when the prompt omits one.
   INVESTOR_ACCOUNT_ID: z.string().regex(/^0\.0\.\d+$/).optional(),

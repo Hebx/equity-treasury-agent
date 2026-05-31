@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { loadAgentEnv } from './config.js';
 import { createTreasuryAgent } from './agent.js';
+import * as ui from './ui.js';
 
 /**
  * End-to-end live demo: a full tokenized-equity lifecycle driven entirely by
@@ -10,10 +11,10 @@ import { createTreasuryAgent } from './agent.js';
  *
  * Story: "Acme Robotics raises a Series A." A treasury operator walks the agent
  * through deploy -> register -> KYC -> issue -> cap table -> follow-on issue by
- * Hedera account id -> document anchor -> audit trail, the way a real back-office
- * user would. The account-id step proves that holders can be addressed by either a
- * 0x EVM address or a Hedera id (0.0.X), resolved automatically, with reads echoing
- * both forms (plugin v0.4.x).
+ * Hedera account id -> updated cap table -> document anchor -> audit trail, the way a
+ * real back-office user would. The account-id step proves that holders can be addressed
+ * by either a 0x EVM address or a Hedera id (0.0.X), resolved automatically, with reads
+ * echoing both forms (plugin v0.4.x).
  *
  *   npm run demo            # run the whole story
  *   npm run demo -- 1 2 3   # run only the listed step numbers
@@ -27,6 +28,9 @@ interface DemoStep {
   title: string;
   /** Natural-language instruction handed to the LLM agent verbatim. */
   instruction: (ctx: DemoContext) => string;
+  /** Optional pause before this step runs, to let the mirror node index the prior
+   *  write before a read (mirror-node indexing lags the consensus tx by a few seconds). */
+  settleMs?: number;
 }
 
 interface DemoContext {
@@ -37,8 +41,6 @@ interface DemoContext {
   symbol: string;
   isin: string;
 }
-
-const HR = '─'.repeat(72);
 
 const STEPS: DemoStep[] = [
   {
@@ -75,11 +77,21 @@ const STEPS: DemoStep[] = [
     title: 'Issue a follow-on tranche addressed by Hedera account id',
     instruction: (c) =>
       `Issue another 25,000 shares of ${c.symbol} to investor ${c.investorAccountId} — ` +
-      `note that's a Hedera account id (0.0.X), not an EVM address. Then show me the ` +
-      `updated cap table with each holder's EVM address and account id.`,
+      `note that's a Hedera account id (0.0.X), not an EVM address. Resolve it and confirm ` +
+      `the issuance with the transaction hash.`,
   },
   {
     n: 6,
+    title: 'Read the updated cap table (both address forms)',
+    // Reads run after the issue above; the mirror node needs a few seconds to index the
+    // new Transfer event, so settle before reading or the balance comes back stale.
+    settleMs: 6000,
+    instruction: (c) =>
+      `Resolve symbol ${c.symbol} and show me the updated cap table, with each holder's ` +
+      `EVM address and Hedera account id (0.0.X).`,
+  },
+  {
+    n: 7,
     title: 'Anchor the term sheet as a document-of-record',
     instruction: (c) =>
       `Anchor a document titled "Acme Robotics Series A Term Sheet" to the registry for symbol ` +
@@ -87,7 +99,7 @@ const STEPS: DemoStep[] = [
       `Pre-money $40M. Liquidation preference 1x non-participating. Board: 2 founders, 1 investor."`,
   },
   {
-    n: 7,
+    n: 8,
     title: 'Read back the registry audit trail',
     instruction: () =>
       `List the full securities-registry audit trail and summarize what records exist ` +
@@ -131,49 +143,62 @@ async function main(): Promise<void> {
     .filter((n) => Number.isInteger(n));
   const selected = want.length ? STEPS.filter((s) => want.includes(s.n)) : STEPS;
 
-  // Step 5 (account-id issuance) needs INVESTOR_ACCOUNT_ID to demonstrate id -> EVM
-  // resolution. If it's unset, drop it and say why rather than issuing to `undefined`.
-  const steps = investorAccountId ? selected : selected.filter((s) => s.n !== 5);
+  // Steps 5 (account-id issuance) and 6 (the resulting updated cap-table read) need
+  // INVESTOR_ACCOUNT_ID to demonstrate id -> EVM resolution. If it's unset, drop both
+  // rather than issuing to `undefined` or reading an unchanged cap table.
+  const steps = investorAccountId ? selected : selected.filter((s) => s.n !== 5 && s.n !== 6);
   if (!investorAccountId && selected.some((s) => s.n === 5)) {
-    process.stdout.write(
-      '\nNote: INVESTOR_ACCOUNT_ID is not set — skipping step 5 (the account-id\n' +
-        'issuance/resolution demo). Set it in .env to include it.\n',
-    );
+    ui.note('INVESTOR_ACCOUNT_ID not set — skipping steps 5 & 6 (account-id issuance + updated cap table). Set it in .env to include them.');
   }
 
-  process.stdout.write(
-    `\nEquity Treasury Agent — live e2e demo on ${env.HEDERA_NETWORK.toUpperCase()}\n` +
-      `Investor: ${ctx.investor}\nSecurity symbol: ${ctx.symbol}\n${HR}\n`,
-  );
+  ui.banner({
+    network: env.HEDERA_NETWORK,
+    model: env.LLM_MODEL ?? (env.LLM_PROVIDER === 'openai' ? 'gpt-4o-mini' : 'gemini-2.5-flash'),
+    provider: env.LLM_PROVIDER,
+    investor: ctx.investor,
+    symbol: ctx.symbol,
+    steps: steps.length,
+  });
 
   const agent = await createTreasuryAgent(env);
   let failures = 0;
+  const runStarted = Date.now();
 
   try {
     for (const step of steps) {
       const instruction = step.instruction(ctx);
-      process.stdout.write(`\n[${step.n}/${STEPS.length}] ${step.title}\n> ${instruction}\n\n`);
+      ui.stepHeader(step.n, STEPS.length, step.title);
+      ui.instruction(instruction);
+      if (step.settleMs) {
+        ui.note(`settling ${(step.settleMs / 1000).toFixed(0)}s for the mirror node to index the prior write…`);
+        await new Promise((r) => setTimeout(r, step.settleMs));
+      }
       const started = Date.now();
+      const spin = ui.spinner('agent is working…');
       try {
         const reply = await agent.run(instruction);
+        spin.stop();
         const secs = ((Date.now() - started) / 1000).toFixed(1);
-        process.stdout.write(`${reply}\n\n(${secs}s)\n${HR}\n`);
+        ui.reply(reply);
+        ui.stepOk(secs);
       } catch (err) {
+        spin.stop();
         failures += 1;
         const msg = err instanceof Error ? err.message : String(err);
-        process.stdout.write(`STEP ${step.n} FAILED: ${msg}\n${HR}\n`);
+        ui.stepFail(step.n, msg);
       }
     }
   } finally {
     agent.client.close();
   }
 
-  if (failures) {
-    process.stdout.write(`\nDemo finished with ${failures} failed step(s).\n`);
-    process.exitCode = 1;
-  } else {
-    process.stdout.write(`\nDemo complete. All steps ran against live ${env.HEDERA_NETWORK}.\n`);
-  }
+  ui.summary({
+    total: steps.length,
+    failures,
+    network: env.HEDERA_NETWORK,
+    elapsedSec: ((Date.now() - runStarted) / 1000).toFixed(1),
+  });
+  if (failures) process.exitCode = 1;
 }
 
 main().catch((err) => {

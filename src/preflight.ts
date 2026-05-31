@@ -75,14 +75,33 @@ async function main(): Promise<void> {
     checks.push({ name: 'mirror node', ok: false, detail: msg(err) });
   }
 
-  // 4. LLM key present (presence only; no spend).
+  // 4. LLM key present (and optional OpenAI-compatible proxy reachability).
   const hasKey =
     env.LLM_PROVIDER === 'google' ? Boolean(env.GEMINI_API_KEY) : Boolean(env.OPENAI_API_KEY);
+  const llmDetail =
+    env.LLM_PROVIDER === 'openai' && env.OPENAI_BASE_URL
+      ? `${env.LLM_PROVIDER} via ${env.OPENAI_BASE_URL} (${env.LLM_MODEL ?? 'default model'})`
+      : `${env.LLM_PROVIDER} (${env.LLM_MODEL ?? 'default model'})`;
   checks.push({
     name: 'llm key',
     ok: hasKey,
-    detail: `${env.LLM_PROVIDER} (${env.LLM_MODEL ?? 'default model'})`,
+    detail: llmDetail,
   });
+
+  if (env.LLM_PROVIDER === 'openai' && env.OPENAI_BASE_URL && env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, '')}/models`, {
+        headers: { authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      });
+      checks.push({
+        name: 'llm proxy',
+        ok: res.ok,
+        detail: res.ok ? `HTTP ${res.status}` : `HTTP ${res.status} (${env.OPENAI_BASE_URL})`,
+      });
+    } catch (err) {
+      checks.push({ name: 'llm proxy', ok: false, detail: msg(err) });
+    }
+  }
 
   for (const c of checks) {
     process.stdout.write(`${c.ok ? 'PASS' : 'FAIL'}  ${c.name.padEnd(16)} ${c.detail}\n`);

@@ -18,7 +18,8 @@ export function buildHederaClient(env: AgentEnv): Client {
 
 /**
  * Build the chat model from env. Defaults to Google Gemini; set LLM_PROVIDER=openai
- * to switch. temperature=0 keeps tool selection stable without making the agent
+ * to switch (OpenAI API or an OpenAI-compatible proxy such as kiro-gateway via
+ * OPENAI_BASE_URL). temperature=0 keeps tool selection stable without making the agent
  * deterministic — the LLM still chooses tools and arguments from natural language.
  */
 export async function buildLlm(env: AgentEnv): Promise<BaseChatModel> {
@@ -34,6 +35,9 @@ export async function buildLlm(env: AgentEnv): Promise<BaseChatModel> {
       temperature: 0,
       maxRetries,
       apiKey: env.OPENAI_API_KEY,
+      ...(env.OPENAI_BASE_URL
+        ? { configuration: { baseURL: env.OPENAI_BASE_URL } }
+        : {}),
     }) as unknown as BaseChatModel;
   }
   const { ChatGoogleGenerativeAI } = await import('@langchain/google-genai');
