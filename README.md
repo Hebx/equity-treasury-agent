@@ -37,6 +37,9 @@ Through the ATS plugin, the agent can:
 - **Read** the cap table (holders and balances) from on-chain Transfer events
 - **Pay a dividend** as a pro-rata HBAR fan-out across current holders
 
+Investors, holders, and securities can be named by **EVM address (`0x...`) or Hedera id
+(`0.0.x`)** interchangeably — ids are resolved automatically, and reads report both forms.
+
 Plus an on-chain **registry and audit trail** built on Hedera Consensus Service (HCS):
 
 - **Register** a deployed security so it can be **resolved by name, symbol, or ISIN**
@@ -177,7 +180,7 @@ The lifecycle the agent walks, end to end:
    (EVM)      (HCS)         (HCS)        (EVM)     (mirror)        (HCS)          (HCS)
 ```
 
-The plugin is consumed as the published npm package `@hebx/hak-ats-plugin` (v0.3.x).
+The plugin is consumed as the published npm package `@hebx/hak-ats-plugin` (v0.4.x).
 
 ## Requirements
 
@@ -268,10 +271,13 @@ release check on it.
 - **Network.** `HEDERA_NETWORK` selects testnet (default) or mainnet. Mainnet moves
   real value and is irreversible; the agent and preflight both surface the active
   network so you always know where you are.
-- **Addresses.** Issuance and transfers use **EVM addresses** (`0x...`), not Hedera
-  `0.0.x` ids. The agent will ask for the EVM address if you give it an account id.
-  (Dividends are the exception — they pay native HBAR to the `0.0.x` accounts resolved
-  from the cap table.)
+- **Addresses.** Every address — the security and any investor / holder — can be given
+  as either an **EVM address** (`0x...`) or a **Hedera id** (`0.0.x`). Ids are resolved to
+  their canonical EVM address automatically before each on-chain call, so the two forms
+  are interchangeable and the agent never has to ask you to convert. Reads echo both:
+  the cap table reports each holder's account id alongside its EVM address, and issuance
+  returns the investor's account id when you addressed them by id. (Dividends pay native
+  HBAR to the `0.0.x` accounts resolved from the cap table.)
 - **ISIN.** Deployment requires a checksum-valid ISO-6166 ISIN. `US0378331005`
   (Apple) is a convenient valid value for testing.
 - **Registry topic.** The first registry write creates an HCS topic and returns its id.
