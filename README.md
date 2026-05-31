@@ -125,29 +125,25 @@ party, which is exactly what a securities regulator expects of a transfer agent.
 ## Proof: a clean end-to-end run on live testnet
 
 The lifecycle below was driven entirely by natural language through the LLM agent on
-Hedera testnet (model `gemini-2.5-flash`, operator `0.0.9050506`). Every value is
-tool-returned and confirmed on-chain or via the mirror node — not lifted from the
-agent's prose. Reproduce it with `npm run demo`.
+Hedera testnet (model `claude-sonnet-4.5` via an OpenAI-compatible router, operator
+`0.0.9050506`, plugin `0.4.x`). Every value is tool-returned and independently confirmed
+on-chain or via the mirror node — not lifted from the agent's prose. Reproduce it with
+`npm run demo`.
 
 | Step | Action | On-chain result |
 |---|---|---|
-| 1 | Deploy + register equity | diamond `0x997f2c7a…0f5b94` · HCS topic `0.0.9105211` seq 1 |
+| 1 | Deploy + register equity | diamond `0x4B916a39‧7355e3` · HCS topic `0.0.9108604` seq 1 |
 | 2 | Attest investor KYC | registry seq 2 (GRANTED, US, ref `acme-sa-001`) |
-| 3 | Issue 50,000 shares | tx `0x96dcac85…49ad5` |
+| 3 | Issue 50,000 shares (by EVM address) | tx `0xf6182fea…26abaa34` |
 | 4 | Read cap table | total supply 50,000 · 1 holder (from Transfer events) |
-| 5 | Issue 25,000 more, addressed by Hedera id `0.0.x` | id resolved to the holder's EVM address; balance → 75,000, still 1 holder |
-| 6 | Anchor term sheet | SHA-256 `a2cd29bc…08e6b3` · registry seq 3 |
-| 7 | Replay audit trail | 1 security + 1 KYC + 1 document, all resolved |
+| 5 | Issue 25,000 more, addressed by Hedera id `0.0.9050511` | id resolved to the holder's EVM address · tx `0xa06948a7…49e14bab9f` |
+| 6 | Read updated cap table (both address forms) | balance → 75,000, still 1 holder · shows `0x3154…9c43` **and** `0.0.9050511` |
+| 7 | Anchor term sheet | SHA-256 `a2cd29bc…08e6b3` · registry seq 3 |
+| 8 | Replay audit trail | 1 security + 1 KYC + 1 document, all resolved |
 
-Whole-lifecycle cost: ~1.9 HBAR, dominated by the deploy. Symbols and topics are minted
-fresh per run, so repeats never collide.
-
-> Steps 1–4, 6, 7 show values from a verified six-step run (2026-05-31). Step 5 — the
-> follow-on issuance addressed by a Hedera account id — was added in agent `v0.2.0`
-> (plugin `0.4.x`); its exact tx hash is filled in on your next `npm run demo`. Because
-> step 5 re-issues to the *same* holder, the step 6/7 registry values are unchanged (an
-> issuance is an on-chain mint, not a registry record), and step 4 is the pre-tranche
-> snapshot.
+Final on-chain state: `balanceOf(holder)` = `totalSupply()` = **75,000**, one holder.
+Whole-lifecycle cost: ~1.7 HBAR, dominated by the deploy. Symbols and topics are minted
+fresh per run, so repeats never collide — your run prints its own values.
 
 ## Architecture
 
